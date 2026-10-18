@@ -12,7 +12,7 @@ st.set_page_config(
 st.title("Portal de Bienvenida Inteligente 🚀")
 
 st.markdown("---")
-nombre_usuario = st.text_input("¿Cómo te llamas?", placeholder="Introduce tu nombre aquí...")
-if nombre_usuario:
+modeloAuto = st.text_input("¿Cuál es tu consulta?", placeholder="selecciona tu modelo de auto..")
+if modeloAuto:
     st.balloons()
-    st.write(f"✨ ¡Hola, {nombre_usuario}! Gracias por visitar tu nuevo portal interactivo inteligente.")
+    st.write(f"✨ ¡Modelo auto ingresado:, {modeloAuto}! a continuacion sus datos")
