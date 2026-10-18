@@ -4,7 +4,7 @@ from datetime import datetime
 import pytz
 
 st.set_page_config(
-    page_title="Mi Portal Inteligente",
+    page_title="Sistema de consulta de mantenimientos",
     page_icon="🌤️",
     layout="centered"
 )
