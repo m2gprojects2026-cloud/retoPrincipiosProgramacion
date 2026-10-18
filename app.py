@@ -9,7 +9,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("Portal de Bienvenida Inteligente 🚀")
+st.title("Sistema de consulta de mantenimiento para autos")
 
 st.markdown("---")
 modeloAuto = st.text_input("¿Cuál es tu consulta?", placeholder="selecciona tu modelo de auto..")
