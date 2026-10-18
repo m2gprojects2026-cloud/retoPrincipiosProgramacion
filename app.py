@@ -4,9 +4,9 @@ from datetime import datetime
 import pytz
 
 st.set_page_config(
-    page_title="Sistema de consulta de mantenimientos",
-    page_icon="🌤️",
-    layout="centered"
+    page_title="AutoCare AI",
+    page_icon="🚗",
+    layout="wide"
 )
 
 st.title("Sistema de consulta de mantenimiento para autos")
