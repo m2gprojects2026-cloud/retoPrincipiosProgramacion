@@ -205,7 +205,33 @@ with tab4:
         "Analizar con IA"
     ):
 
-        if gemini_ok:
+         if gemini_ok:
 
             prompt = f"""
+            Actúa como mecánico automotriz.
+
+            Analiza:
+
+            {consulta}
+
+            Da:
+            - Riesgos detectados
+            - Mantenimientos recomendados
+            - Prioridad
+            - Explicación sencilla
+            """
+
+            respuesta = model.generate_content(
+                prompt
+            )
+
+            st.write(
+                respuesta.text
+            )
+
+        else:
+
+            st.warning(
+                "Gemini no configurado"
+            )
         
