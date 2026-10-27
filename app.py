@@ -21,7 +21,7 @@ try:
     db_ok = True
 except Exception as e:
     db_ok = False
-    st.error(f"❌ Error al conectar con PostgreSQL: {e}")
+    st.error(f"❌ Error al conectar con PostgreSQL Guadamuz: {e}")
 
 # Función para inicializar las tablas en PostgreSQL si no existen
 def inicializar_db():
