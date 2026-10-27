@@ -1,13 +1,10 @@
 import streamlit as st
 import pandas as pd
 
-from sqlalchemy import text
-
 from google import genai
 
-
 # =====================================
-# Configuración de página
+# Configuración
 # =====================================
 
 st.set_page_config(
@@ -16,88 +13,32 @@ st.set_page_config(
     layout="wide"
 )
 
-
 # =====================================
-# Conexión PostgreSQL
-# =====================================
-
-try:
-
-    conn = st.connection(
-        "postgresql",
-        type="sql"
-    )
-
-    db_ok = True
-
-except Exception as e:
-
-    db_ok = False
-
-    st.error(
-        f"❌ Error al conectar con PostgreSQL: {e}"
-    )
-
-
-# =====================================
-# Crear tablas
+# Memoria temporal
 # =====================================
 
-def inicializar_db():
+if "vehiculos" not in st.session_state:
+    st.session_state.vehiculos = []
 
-    if not db_ok:
-        return
-
-    with conn.session as session:
-
-        session.execute(text("""
-            CREATE TABLE IF NOT EXISTS vehiculos (
-                id SERIAL PRIMARY KEY,
-                marca VARCHAR(100),
-                modelo VARCHAR(100),
-                anio INTEGER,
-                kilometraje INTEGER
-            );
-        """))
-
-        session.execute(text("""
-            CREATE TABLE IF NOT EXISTS mantenimientos (
-                id SERIAL PRIMARY KEY,
-                vehiculo_id INTEGER
-                    REFERENCES vehiculos(id)
-                    ON DELETE CASCADE,
-                servicio TEXT,
-                costo NUMERIC(10,2),
-                kilometraje INTEGER
-            );
-        """))
-
-        session.commit()
-
-
-inicializar_db()
-
+if "mantenimientos" not in st.session_state:
+    st.session_state.mantenimientos = []
 
 # =====================================
 # Gemini
 # =====================================
 
 client = None
-
 MODELO = "gemini-2.5-flash"
 
 try:
-
     client = genai.Client(
         api_key=st.secrets["GEMINI_API_KEY"]
     )
-
 except Exception:
     pass
 
-
 # =====================================
-# UI
+# Título
 # =====================================
 
 st.title("🚗 AutoCare AI")
@@ -111,16 +52,13 @@ tab1, tab2, tab3, tab4 = st.tabs(
     ]
 )
 
-
 # =====================================
-# TAB 1
+# TAB 1 - Vehículos
 # =====================================
 
 with tab1:
 
-    st.subheader(
-        "Registrar vehículo"
-    )
+    st.subheader("Registrar vehículo")
 
     with st.form("vehiculo_form"):
 
@@ -147,13 +85,7 @@ with tab1:
 
     if guardar:
 
-        if not db_ok:
-
-            st.error(
-                "Base de datos no disponible."
-            )
-
-        elif not marca or not modelo:
+        if not marca or not modelo:
 
             st.warning(
                 "Debe indicar marca y modelo."
@@ -161,44 +93,22 @@ with tab1:
 
         else:
 
-            sql = text("""
-                INSERT INTO vehiculos
-                (
-                    marca,
-                    modelo,
-                    anio,
-                    kilometraje
-                )
-                VALUES
-                (
-                    :marca,
-                    :modelo,
-                    :anio,
-                    :kilometraje
-                )
-            """)
-
-            with conn.session as session:
-
-                session.execute(
-                    sql,
-                    {
-                        "marca": marca,
-                        "modelo": modelo,
-                        "anio": int(anio),
-                        "kilometraje": int(kilometraje)
-                    }
-                )
-
-                session.commit()
-
-            st.success(
-                "✅ Vehículo guardado"
+            st.session_state.vehiculos.append(
+                {
+                    "id": len(st.session_state.vehiculos) + 1,
+                    "marca": marca,
+                    "modelo": modelo,
+                    "anio": int(anio),
+                    "kilometraje": int(kilometraje),
+                }
             )
 
+            st.success(
+                "✅ Vehículo guardado correctamente"
+            )
 
 # =====================================
-# TAB 2
+# TAB 2 - Mantenimientos
 # =====================================
 
 with tab2:
@@ -207,37 +117,28 @@ with tab2:
         "Registrar mantenimiento"
     )
 
-    if db_ok:
+    if not st.session_state.vehiculos:
 
-        df_vehiculos = conn.query(
-            """
-            SELECT
-                id,
-                marca,
-                modelo
-            FROM vehiculos
-            ORDER BY id DESC
-            """,
-            ttl=0
+        st.warning(
+            "Primero registre un vehículo."
         )
 
-        if df_vehiculos.empty:
+    else:
 
-            st.info(
-                "No hay vehículos registrados."
-            )
+        opciones = {
+            f"{v['marca']} {v['modelo']}": v["id"]
+            for v in st.session_state.vehiculos
+        }
 
-        else:
+        vehiculo = st.selectbox(
+            "Vehículo",
+            list(opciones.keys())
+        )
 
-            opciones = {
-                f"{row['marca']} {row['modelo']}": row["id"]
-                for _, row
-                in df_vehiculos.iterrows()
-            }
+        servicio = st.text_input(
+            "Servicio realizado"
+        )
 
-            vehiculo = st.selectbox(
-                "Vehículo",
-                list(opciones.keys())
-            )
-
-   
+        costo = st.number_input(
+            "Costo",
+            
