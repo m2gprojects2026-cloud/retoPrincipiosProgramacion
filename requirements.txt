@@ -6,5 +6,6 @@ google-genai
 pandas
 sqlalchemy
 psycopg2-binary
+psycopg[binary]
 transformers
 torch
