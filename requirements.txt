@@ -2,6 +2,7 @@ streamlit
 requests
 pytz
 google-generativeai
+google-genai
 pandas
 sqlalchemy
 psycopg2-binary
