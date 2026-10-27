@@ -1,151 +1,211 @@
-
 import streamlit as st
 import pandas as pd
+import google.generativeai as genai
 
-from sqlalchemy import text
-from db import engine, crear_tablas
-from ia import recomendar
-
-crear_tablas()
+# ==========================
+# Configuración
+# ==========================
 
 st.set_page_config(
     page_title="AutoCare AI",
-    page_icon="🚗"
+    page_icon="🚗",
+    layout="wide"
 )
+
+# ==========================
+# Memoria temporal
+# ==========================
+
+if "vehiculos" not in st.session_state:
+    st.session_state.vehiculos = []
+
+if "mantenimientos" not in st.session_state:
+    st.session_state.mantenimientos = []
+
+# ==========================
+# IA Gemini (Opcional)
+# ==========================
+
+gemini_ok = False
+
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    gemini_ok = True
+except:
+    pass
+
+# ==========================
+# Título
+# ==========================
 
 st.title("🚗 AutoCare AI")
 
-tab1, tab2, tab3 = st.tabs(
+tab1, tab2, tab3, tab4 = st.tabs(
     [
         "Vehículos",
         "Mantenimientos",
+        "Historial",
         "IA"
     ]
 )
 
+# ==========================
+# Vehículos
+# ==========================
+
 with tab1:
 
-    st.subheader("Registrar Vehículo")
+    st.subheader("Registrar vehículo")
 
-    marca = st.text_input("Marca")
-    modelo = st.text_input("Modelo")
-    anio = st.number_input(
-        "Año",
-        1980,
-        2050
-    )
+    with st.form("vehiculo_form"):
 
-    kilometraje = st.number_input(
-        "Kilometraje",
-        0
-    )
+        marca = st.text_input("Marca")
+        modelo = st.text_input("Modelo")
+        anio = st.number_input(
+            "Año",
+            min_value=1980,
+            max_value=2050,
+            value=2020
+        )
 
-    if st.button("Guardar Vehículo"):
+        kilometraje = st.number_input(
+            "Kilometraje",
+            min_value=0,
+            value=0
+        )
 
-        with engine.begin() as conn:
+        guardar = st.form_submit_button(
+            "Guardar vehículo"
+        )
 
-            conn.execute(
-                text("""
-                INSERT INTO vehiculos
-                (marca, modelo, anio, kilometraje)
-                VALUES
-                (:marca,:modelo,:anio,:km)
-                """),
-                {
-                    "marca": marca,
-                    "modelo": modelo,
-                    "anio": anio,
-                    "km": kilometraje
-                }
-            )
+    if guardar:
+
+        st.session_state.vehiculos.append(
+            {
+                "id": len(st.session_state.vehiculos) + 1,
+                "marca": marca,
+                "modelo": modelo,
+                "anio": anio,
+                "kilometraje": kilometraje,
+            }
+        )
 
         st.success("Vehículo registrado")
 
+# ==========================
+# Mantenimientos
+# ==========================
+
 with tab2:
 
-    st.subheader("Registrar mantenimiento")
+    if not st.session_state.vehiculos:
 
-    with engine.begin() as conn:
+        st.warning(
+            "Primero registra un vehículo"
+        )
 
-        vehiculos = conn.execute(
-            text("""
-            SELECT id,
-                   marca,
-                   modelo
-            FROM vehiculos
-            """)
-        ).fetchall()
+    else:
 
-    opciones = {
-        f"{v[1]} {v[2]}": v[0]
-        for v in vehiculos
-    }
+        opciones = {
+            f"{v['marca']} {v['modelo']}":
+            v["id"]
+            for v in st.session_state.vehiculos
+        }
 
-    seleccionado = st.selectbox(
-        "Vehículo",
-        opciones.keys()
-    )
+        vehiculo = st.selectbox(
+            "Vehículo",
+            list(opciones.keys())
+        )
 
-    servicio = st.text_input(
-        "Servicio realizado"
-    )
+        servicio = st.text_input(
+            "Servicio realizado"
+        )
 
-    costo = st.number_input(
-        "Costo",
-        0.0
-    )
+        costo = st.number_input(
+            "Costo",
+            min_value=0.0
+        )
 
-    km = st.number_input(
-        "Kilometraje actual",
-        0
-    )
+        km = st.number_input(
+            "Kilometraje actual",
+            min_value=0
+        )
 
-    if st.button("Guardar mantenimiento"):
+        if st.button("Guardar mantenimiento"):
 
-        with engine.begin() as conn:
-
-            conn.execute(
-                text("""
-                INSERT INTO mantenimientos
-                (
-                    vehiculo_id,
-                    fecha,
-                    servicio,
-                    kilometraje,
-                    costo
-                )
-                VALUES
-                (
-                    :vehiculo,
-                    CURRENT_DATE,
-                    :servicio,
-                    :km,
-                    :costo
-                )
-                """),
+            st.session_state.mantenimientos.append(
                 {
-                    "vehiculo": opciones[seleccionado],
-                    "servicio": servicio,
-                    "km": km,
-                    "costo": costo
+                    "vehiculo_id":
+                        opciones[vehiculo],
+                    "servicio":
+                        servicio,
+                    "costo":
+                        costo,
+                    "kilometraje":
+                        km
                 }
             )
 
-        st.success("Mantenimiento guardado")
+            st.success(
+                "Mantenimiento guardado"
+            )
+
+# ==========================
+# Historial
+# ==========================
 
 with tab3:
 
-    st.subheader("Asistente IA")
-
-    historial = st.text_area(
-        "Describe el historial"
+    st.subheader(
+        "Vehículos registrados"
     )
 
-    if st.button("Analizar"):
+    if st.session_state.vehiculos:
 
-        recomendacion = recomendar(historial)
-
-        st.success(
-            f"Próximo mantenimiento recomendado: {recomendacion}"
+        st.dataframe(
+            pd.DataFrame(
+                st.session_state.vehiculos
+            )
         )
 
+    st.subheader(
+        "Mantenimientos"
+    )
+
+    if st.session_state.mantenimientos:
+
+        st.dataframe(
+            pd.DataFrame(
+                st.session_state.mantenimientos
+            )
+        )
+
+# ==========================
+# IA
+# ==========================
+
+with tab4:
+
+    st.subheader(
+        "Asistente de mantenimiento"
+    )
+
+    if not gemini_ok:
+
+        st.info(
+            "Configura GEMINI_API_KEY para habilitar IA"
+        )
+
+    consulta = st.text_area(
+        "Describe el vehículo e historial"
+    )
+
+    if st.button(
+        "Analizar con IA"
+    ):
+
+        if gemini_ok:
+
+            prompt = f"""
+        
