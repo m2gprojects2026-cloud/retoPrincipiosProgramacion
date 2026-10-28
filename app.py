@@ -34,8 +34,16 @@ try:
     client = genai.Client(
         api_key=st.secrets["GEMINI_API_KEY"]
     )
-except Exception:
-    pass
+
+    st.success("✅ Gemini configured successfully")
+
+except Exception as e:
+
+    st.error(
+        f"❌ Error configuring Gemini: {str(e)}"
+    )
+
+    client = None
 
 # =====================================
 # Título
