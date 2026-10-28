@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 
+from sqlalchemy import create_engine, text
+
 from google import genai
 
 # =====================================
@@ -14,39 +16,91 @@ st.set_page_config(
 )
 
 # =====================================
-# Memoria temporal
+# PostgreSQL / Supabase
 # =====================================
 
-if "vehiculos" not in st.session_state:
-    st.session_state.vehiculos = []
+engine = None
 
-if "mantenimientos" not in st.session_state:
-    st.session_state.mantenimientos = []
+try:
+
+    engine = create_engine(
+        st.secrets["DATABASE_URL"]
+    )
+
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+
+    st.sidebar.success(
+        "✅ PostgreSQL conectado"
+    )
+
+except Exception as e:
+
+    st.sidebar.error(
+        f"❌ Error PostgreSQL: {e}"
+    )
+
+# =====================================
+# Crear tablas
+# =====================================
+
+def inicializar_db():
+
+    if engine is None:
+        return
+
+    with engine.begin() as conn:
+
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS vehiculos(
+            id SERIAL PRIMARY KEY,
+            marca VARCHAR(100),
+            modelo VARCHAR(100),
+            anio INTEGER,
+            kilometraje INTEGER
+        )
+        """))
+
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS mantenimientos(
+            id SERIAL PRIMARY KEY,
+            vehiculo_id INTEGER
+                REFERENCES vehiculos(id)
+                ON DELETE CASCADE,
+            servicio TEXT,
+            costo NUMERIC(10,2),
+            kilometraje INTEGER
+        )
+        """))
+
+inicializar_db()
 
 # =====================================
 # Gemini
 # =====================================
 
 client = None
-MODELO = "gemini-3.5-flash-lite"#"gemini-3.8-flash"
+
+MODELO = "gemini-2.5-flash"
 
 try:
+
     client = genai.Client(
         api_key=st.secrets["GEMINI_API_KEY"]
     )
 
-    st.success("✅ Gemini configured successfully")
+    st.sidebar.success(
+        "✅ Gemini conectado"
+    )
 
 except Exception as e:
 
-    st.error(
-        f"❌ Error configuring Gemini: {str(e)}"
+    st.sidebar.error(
+        f"❌ Gemini: {e}"
     )
 
-    client = None
-
 # =====================================
-# Título
+# UI
 # =====================================
 
 st.title("🚗 AutoCare AI")
@@ -61,12 +115,14 @@ tab1, tab2, tab3, tab4 = st.tabs(
 )
 
 # =====================================
-# TAB 1 - Vehículos
+# TAB 1
 # =====================================
 
 with tab1:
 
-    st.subheader("Registrar vehículo")
+    st.subheader(
+        "Registrar vehículo"
+    )
 
     with st.form("vehiculo_form"):
 
@@ -101,22 +157,39 @@ with tab1:
 
         else:
 
-            st.session_state.vehiculos.append(
-                {
-                    "id": len(st.session_state.vehiculos) + 1,
-                    "marca": marca,
-                    "modelo": modelo,
-                    "anio": int(anio),
-                    "kilometraje": int(kilometraje),
-                }
-            )
+            with engine.begin() as conn:
+
+                conn.execute(
+                    text("""
+                    INSERT INTO vehiculos
+                    (
+                        marca,
+                        modelo,
+                        anio,
+                        kilometraje
+                    )
+                    VALUES
+                    (
+                        :marca,
+                        :modelo,
+                        :anio,
+                        :kilometraje
+                    )
+                    """),
+                    {
+                        "marca": marca,
+                        "modelo": modelo,
+                        "anio": int(anio),
+                        "kilometraje": int(kilometraje)
+                    }
+                )
 
             st.success(
-                "✅ Vehículo guardado correctamente"
+                "✅ Vehículo registrado"
             )
 
 # =====================================
-# TAB 2 - Mantenimientos
+# TAB 2
 # =====================================
 
 with tab2:
@@ -125,7 +198,18 @@ with tab2:
         "Registrar mantenimiento"
     )
 
-    if not st.session_state.vehiculos:
+    with engine.connect() as conn:
+
+        df_vehiculos = pd.read_sql(
+            text("""
+            SELECT *
+            FROM vehiculos
+            ORDER BY marca
+            """),
+            conn
+        )
+
+    if df_vehiculos.empty:
 
         st.warning(
             "Primero registre un vehículo."
@@ -134,8 +218,10 @@ with tab2:
     else:
 
         opciones = {
-            f"{v['marca']} {v['modelo']}": v["id"]
-            for v in st.session_state.vehiculos
+            f"{row['marca']} {row['modelo']}":
+                row["id"]
+            for _, row
+            in df_vehiculos.iterrows()
         }
 
         vehiculo = st.selectbox(
@@ -153,8 +239,8 @@ with tab2:
             format="%.2f"
         )
 
-        km = st.number_input(
-            "Kilometraje",
+        kilometraje_servicio = st.number_input(
+            "Kilometraje del servicio",
             min_value=0
         )
 
@@ -170,79 +256,107 @@ with tab2:
 
             else:
 
-                st.session_state.mantenimientos.append(
-                    {
-                        "vehiculo_id":
-                            opciones[vehiculo],
-                        "vehiculo":
-                            vehiculo,
-                        "servicio":
+                with engine.begin() as conn:
+
+                    conn.execute(
+                        text("""
+                        INSERT INTO mantenimientos
+                        (
+                            vehiculo_id,
                             servicio,
-                        "costo":
                             costo,
-                        "kilometraje":
-                            km
-                    }
-                )
+                            kilometraje
+                        )
+                        VALUES
+                        (
+                            :vehiculo_id,
+                            :servicio,
+                            :costo,
+                            :kilometraje
+                        )
+                        """),
+                        {
+                            "vehiculo_id":
+                                opciones[vehiculo],
+                            "servicio":
+                                servicio,
+                            "costo":
+                                costo,
+                            "kilometraje":
+                                kilometraje_servicio
+                        }
+                    )
 
                 st.success(
                     "✅ Mantenimiento guardado"
                 )
 
 # =====================================
-# TAB 3 - Historial
+# TAB 3
 # =====================================
 
 with tab3:
 
-    st.subheader("🚘 Vehículos")
+    st.subheader(
+        "🚘 Vehículos"
+    )
 
-    if st.session_state.vehiculos:
+    with engine.connect() as conn:
 
-        st.dataframe(
-            pd.DataFrame(
-                st.session_state.vehiculos
-            ),
-            use_container_width=True
+        df_v = pd.read_sql(
+            text("""
+            SELECT *
+            FROM vehiculos
+            ORDER BY id DESC
+            """),
+            conn
         )
 
-    else:
-
-        st.info(
-            "No hay vehículos registrados."
-        )
+    st.dataframe(
+        df_v,
+        use_container_width=True
+    )
 
     st.subheader(
         "🛠️ Mantenimientos"
     )
 
-    if st.session_state.mantenimientos:
+    with engine.connect() as conn:
 
-        st.dataframe(
-            pd.DataFrame(
-                st.session_state.mantenimientos
-            ),
-            use_container_width=True
+        df_m = pd.read_sql(
+            text("""
+            SELECT
+                m.id,
+                v.marca,
+                v.modelo,
+                m.servicio,
+                m.costo,
+                m.kilometraje
+            FROM mantenimientos m
+            JOIN vehiculos v
+                 ON v.id = m.vehiculo_id
+            ORDER BY m.id DESC
+            """),
+            conn
         )
 
-    else:
-
-        st.info(
-            "No hay mantenimientos registrados."
-        )
+    st.dataframe(
+        df_m,
+        use_container_width=True
+    )
 
 # =====================================
-# TAB 4 - IA
+# TAB 4
 # =====================================
 
 with tab4:
 
     st.subheader(
-        "Asistente de Mantenimiento"
+        "Asistente IA"
     )
 
     consulta = st.text_area(
-        "Describe el problema o consulta sobre el vehículo"
+        "Describe el problema o consulta"
     )
 
     if st.button(
@@ -252,7 +366,7 @@ with tab4:
         if client is None:
 
             st.warning(
-                "Configure GEMINI_API_KEY en Secrets."
+                "Gemini no configurado."
             )
 
         elif not consulta.strip():
@@ -263,34 +377,46 @@ with tab4:
 
         else:
 
-            historial_vehiculos = str(
-                st.session_state.vehiculos
-            )
+            with engine.connect() as conn:
 
-            historial_mantenimientos = str(
-                st.session_state.mantenimientos
-            )
+                vehiculos = pd.read_sql(
+                    text("""
+                    SELECT *
+                    FROM vehiculos
+                    """),
+                    conn
+                )
+
+                mantenimientos = pd.read_sql(
+                    text("""
+                    SELECT *
+                    FROM mantenimientos
+                    """),
+                    conn
+                )
 
             prompt = f"""
             Actúa como un mecánico automotriz experto.
 
-            Vehículos registrados:
-            {historial_vehiculos}
+            VEHÍCULOS:
 
-            Historial de mantenimiento:
-            {historial_mantenimientos}
+            {vehiculos.to_string(index=False)}
 
-            Consulta del usuario:
+            HISTORIAL DE MANTENIMIENTOS:
+
+            {mantenimientos.to_string(index=False)}
+
+            CONSULTA:
+
             {consulta}
 
-            Responde en español.
-
-            Incluye:
+            Genera:
 
             1. Riesgos detectados.
-            2. Recomendaciones de mantenimiento.
+            2. Próximos mantenimientos.
             3. Prioridad (Baja, Media o Alta).
             4. Explicación sencilla.
+            5. Recomendaciones para ahorrar costos.
             """
 
             try:
@@ -315,17 +441,15 @@ with tab4:
                 )
 
 # =====================================
-# Información
+# Sidebar
 # =====================================
 
 st.sidebar.info(
     """
-    AutoCareAI MVP
+    AutoCareAI
 
-    ⚠️ Los datos se almacenan temporalmente
-    mientras la aplicación permanezca activa.
-
-    Si la aplicación se reinicia,
-    los datos se perderán.
+    ✅ PostgreSQL (Supabase)
+    ✅ Gemini
+    ✅ Persistencia permanente
     """
 )
