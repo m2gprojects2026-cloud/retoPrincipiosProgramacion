@@ -28,7 +28,7 @@ if "mantenimientos" not in st.session_state:
 # =====================================
 
 client = None
-MODELO = "gemini-3.8-flash"
+MODELO = "gemini-3.5-flash-lite"#"gemini-3.8-flash"
 
 try:
     client = genai.Client(
