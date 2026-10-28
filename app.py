@@ -81,7 +81,7 @@ inicializar_db()
 
 client = None
 
-MODELO = "gemini-2.5-flash"
+MODELO = "gemini-3.5-flash-lite"
 
 try:
 
