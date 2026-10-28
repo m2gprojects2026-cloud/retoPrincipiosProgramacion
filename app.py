@@ -328,3 +328,4 @@ st.sidebar.info(
     Si la aplicación se reinicia,
     los datos se perderán.
     """
+)
